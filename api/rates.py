@@ -1,3 +1,6 @@
+
+Copy
+
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import urllib.request
@@ -53,17 +56,14 @@ class handler(BaseHTTPRequestHandler):
         })
 
     def _parse(self, html, currency):
-        """
-        Parse the table rows from klmoneychanger.
-        Table structure:
-          | Money Changer | Unit | We Buy | We Sell MYR | Last Update |
-        Each money changer has 2 rows:
-          Row 1: header (name only, merged cells)
-          Row 2: actual data (unit, buy, sell, updated)
-        """
         results = []
 
-        # Extract all <tr> blocks
+        # Each money changer block looks like:
+        # <tr><td colspan=...>NAME</td></tr>
+        # <tr><td>UNIT (e.g. 1000 JPY)</td><td>BUY</td><td>SELL</td><td>UPDATED</td></tr>
+        # <tr><td colspan=...>Last updated on ...</td></tr>
+        # <tr><td colspan=...>address block</td></tr>
+
         rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.DOTALL | re.IGNORECASE)
 
         def strip_tags(s):
@@ -73,32 +73,22 @@ class handler(BaseHTTPRequestHandler):
 
         for row in rows:
             cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.DOTALL | re.IGNORECASE)
-            if not cells:
-                continue
-
             texts = [strip_tags(c) for c in cells]
-            texts = [t for t in texts if t]  # remove empties
+            texts = [t for t in texts if t]
 
-            # Row with just 1 meaningful cell = money changer name header
-            if len(texts) == 1:
-                name = texts[0]
-                # Skip if it's a "Last updated on..." line
-                if not name.lower().startswith("last updated"):
-                    current_name = name.title()
+            if not texts:
                 continue
 
-            # Row with 4 meaningful cells = unit | buy | sell | updated
-            if len(texts) >= 4 and current_name:
-                unit_str  = texts[0]   # e.g. "1000 JPY" or "1 USD"
-                buy_str   = texts[1]
-                sell_str  = texts[2]
-                updated   = texts[3]
+            # Data row: must contain currency code in first cell e.g. "1000 JPY" or "1 USD"
+            if len(texts) >= 4 and re.search(rf"\d+\s*{currency}", texts[0], re.IGNORECASE):
+                unit_str  = texts[0]   # "1000 JPY"
+                buy_str   = texts[1]   # "24.92"
+                sell_str  = texts[2]   # "25.22"
+                updated   = texts[3]   # "2026-02-27 8:55 AM"
 
-                # Parse unit number
                 unit_match = re.search(r"(\d+)", unit_str)
                 unit = int(unit_match.group(1)) if unit_match else 1
 
-                # Parse buy / sell as floats
                 try:
                     buy  = float(re.sub(r"[^\d.]", "", buy_str))
                     sell = float(re.sub(r"[^\d.]", "", sell_str))
@@ -106,9 +96,7 @@ class handler(BaseHTTPRequestHandler):
                     current_name = None
                     continue
 
-                # Skip rows where buy/sell look invalid
-                if buy <= 0 or sell <= 0:
-                    current_name = None
+                if buy <= 0 or sell <= 0 or not current_name:
                     continue
 
                 results.append({
@@ -118,9 +106,18 @@ class handler(BaseHTTPRequestHandler):
                     "sell":    sell,
                     "updated": updated,
                 })
-                current_name = None  # reset, next name row will set it again
+                current_name = None
+                continue
 
-        # Sort by buy price descending (best deal for customer on top)
+            # Name row: single cell, not "Last updated", not address-like
+            if len(cells) == 1:
+                name = texts[0] if texts else ""
+                if (name
+                    and not name.lower().startswith("last updated")
+                    and not re.search(r"(google map|jalan|lot |level |floor|kuala lumpur|selangor|puchong|kajang|\+60)", name, re.IGNORECASE)
+                ):
+                    current_name = name.title()
+
         results.sort(key=lambda x: x["buy"], reverse=True)
         return results
 
