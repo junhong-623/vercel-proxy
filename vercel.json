@@ -1,12 +1,7 @@
 {
   "rewrites": [
-    {
-      "source": "/api/search",
-      "destination": "/api/search.py"
-    },
-    {
-      "source": "/api/rates",
-      "destination": "/api/rates.py"
-    }
+    { "source": "/api/search",  "destination": "/api/search.py"  },
+    { "source": "/api/rates",   "destination": "/api/rates.py"   },
+    { "source": "/api/history", "destination": "/api/history.py" }
   ]
 }
