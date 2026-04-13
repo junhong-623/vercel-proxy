@@ -12,15 +12,15 @@ class handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         num_raw = params.get("num", [""])[0]
-        num = re.sub(r"\D", "", num_raw).zfill(4)[:4]
+        num = re.sub(r"\D", "", num_raw)
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
-        if len(num) != 4:
-            self._write({"error": "需要4位数字"})
+        if not num:
+            self._write({"error": "请输入号码"})
             return
 
         url = f"https://4dmanager.net/no/{num}"
