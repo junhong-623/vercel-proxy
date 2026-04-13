@@ -9,20 +9,20 @@ import json
 class handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-        # ── 解析 ?num=1234 ──────────────────────────────────────
+        # Parse ?num=1234 parameter
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         num_raw = params.get("num", [""])[0]
-        num = re.sub(r"\D", "", num_raw).zfill(4)[:4]
+        num = re.sub(r"\D", "", num_raw)
 
-        # CORS headers（允许 GitHub Pages 调用）
+        # CORS headers (allows GitHub Pages calls)
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
-        if len(num) != 4:
-            self._write({"error": "需要4位数字"})
+        if not num:
+            self._write({"error": "请输入号码"})
             return
 
         url = f"https://4dmanager.net/search/{num}"
@@ -49,8 +49,7 @@ class handler(BaseHTTPRequestHandler):
             self._write({"error": f"未知错误: {str(e)}"})
             return
 
-        # ── 解析 keywords meta tag ───────────────────────────────
-        # <meta name="keywords" content="超级玛丽,super mario">
+        # Extract keywords meta tag content
         pattern = (
             r'<meta\s+name=["\']keywords["\']\s+content=["\']([^"\']+)["\']'
             r'|<meta\s+content=["\']([^"\']+)["\']\s+name=["\']keywords["\']'
@@ -63,7 +62,7 @@ class handler(BaseHTTPRequestHandler):
             parts = [p.strip() for p in content.split(",") if p.strip()]
             cn = parts[0] if parts else ""
             en = parts[1] if len(parts) > 1 else ""
-            # 如果只是号码本身，视为无名称
+            # Ignore if keywords match the number itself
             if cn == num:
                 cn, en = "", ""
 
@@ -74,4 +73,4 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, format, *args):
-        pass  # 静默日志
+        pass  # Silent logging
