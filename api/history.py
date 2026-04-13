@@ -108,7 +108,7 @@ def normalize_company(raw):
 def parse_history(html, num):
     """
     Extract draw history rows from 4dmanager.net/no/<num>.
-    Returns list of {date, company, prize} dicts sorted newest-first.
+    Returns list of {date, company, prize, number} dicts sorted newest-first.
     """
     records = []
 
@@ -116,7 +116,7 @@ def parse_history(html, num):
     rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.IGNORECASE | re.DOTALL)
 
     # Detect header row to map column positions
-    date_col = company_col = prize_col = -1
+    date_col = company_col = prize_col = number_col = -1
 
     for row in rows:
         cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.IGNORECASE | re.DOTALL)
@@ -136,6 +136,8 @@ def parse_history(html, num):
                     company_col = i
                 if "prize" in tl or "hadiah" in tl or "position" in tl:
                     prize_col = i
+                if tl in ("no", "no.", "number", "nombor", "4d", "num", "result"):
+                    number_col = i
             continue
 
         # Data row — need at least 3 cells
@@ -151,6 +153,15 @@ def parse_history(html, num):
         company = texts[company_col] if 0 <= company_col < len(texts) else texts[1]
         prize   = texts[prize_col]   if 0 <= prize_col   < len(texts) else texts[2]
 
+        # Winning number: try detected column first, then scan all cells for digit-only value
+        winning = texts[number_col] if 0 <= number_col < len(texts) else ""
+        if not re.match(r"^\d+$", winning.strip()):
+            for t in texts:
+                t = t.strip()
+                if re.match(r"^\d{2,6}$", t) and t != re.sub(r"\D", "", date):
+                    winning = t
+                    break
+
         # Validate date looks like a date (contains digits and separators)
         if not re.search(r"\d{1,4}[-/]\d{1,2}[-/]\d{1,4}", date):
             continue
@@ -159,13 +170,14 @@ def parse_history(html, num):
             "date":    date,
             "company": normalize_company(company),
             "prize":   normalize_prize(prize),
+            "number":  winning.strip(),
         })
 
     # Deduplicate and return newest-first (assuming page is oldest-first)
     seen = set()
     unique = []
     for r in records:
-        key = (r["date"], r["company"], r["prize"])
+        key = (r["date"], r["company"], r["prize"], r["number"])
         if key not in seen:
             seen.add(key)
             unique.append(r)
